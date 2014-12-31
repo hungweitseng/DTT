@@ -27,6 +27,8 @@ struct data_trigger_t
   char name[MAX_LINE_LENGTH];
   char support_thread[MAX_LINE_LENGTH];
   support_thread *state_variable;
+  char function[MAX_LINE_LENGTH];
+  char filename[MAX_LINE_LENGTH];
 };
 
 typedef struct data_trigger_t data_trigger;

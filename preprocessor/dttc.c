@@ -64,6 +64,20 @@ int main(int argc, char **argv)
   {
     create_tables(input_files[i], triggers, blocks, threads);
   }
+
+    for(i=0;i<number_of_triggers;i++)
+    {
+      for(j=0;j<number_of_threads;j++)
+      {
+        if(strcmp(triggers[i].support_thread,threads[j].name)==0)
+        {
+          triggers[i].state_variable = &threads[j];
+          break;
+        }
+      }
+    }
+
+
   /* 2nd phase: generate code */
   for(i = 0; i < number_of_input_files; i++)
   {
@@ -80,7 +94,7 @@ char *eliminate_redundant_characters(char *line)
   }
   for(i=0;i<strlen(line);i++)
   {
-    if(line[i]!=' '||line[i]!='\t')
+    if(line[i]!=' ' && line[i]!='\t')
       return &line[i];
   }
   return NULL;
@@ -89,18 +103,23 @@ char *eliminate_redundant_characters(char *line)
 int create_tables(char *filename, data_trigger *triggers, skippable_region *blocks, support_thread *threads)
 {
   FILE *input_file, *output_file;
-  char input_line[MAX_LINE_LENGTH];
+  char input_buffer[MAX_LINE_LENGTH];
+  char *input_line;
   char temp_input_line[MAX_LINE_LENGTH];
   char pragma_line[MAX_LINE_LENGTH];
+  char current_function[MAX_LINE_LENGTH];
   char *comment_start;
   char *dtt_start;
   char *function_name_start, *function_name_end, *variable_start, *variable_end; // These are for data triggers
-  int inside_comment=0,parse_next_line=0;
+  int inside_comment=0,parse_next_line=0,in_function=0;
   int pragma_type = 0;
   int i,j;
+  int quote_stack=0;
     input_file = fopen(filename,"r"); // Reading the original source.
-    while(fgets(input_line, MAX_LINE_LENGTH-1, input_file) != NULL) // Get source code line
+    while(fgets(input_buffer, MAX_LINE_LENGTH-1, input_file) != NULL) // Get source code line
     {
+      input_line = eliminate_redundant_characters(input_buffer);
+
       if((comment_start = strstr(input_line, "//")) != NULL) // If this line contains a comment
       {
         *comment_start = 0;
@@ -125,7 +144,7 @@ int create_tables(char *filename, data_trigger *triggers, skippable_region *bloc
       }
       if(inside_comment)
       {
-        memset(input_line, 0, MAX_LINE_LENGTH);
+        memset(input_buffer, 0, MAX_LINE_LENGTH);
         continue;
       }
       if(((dtt_start = strstr(input_line, "#pragma DTT")) != NULL) || 
@@ -135,6 +154,7 @@ int create_tables(char *filename, data_trigger *triggers, skippable_region *bloc
          ((dtt_start = strstr(input_line, "#end_block")) != NULL)
         ) // If this line contains a DTT pragma
       {
+
         // Find out which type of pragma this is.
         if(strstr(dtt_start, "#trigger"))
           pragma_type = DATA_TRIGGER_PRAGMA;
@@ -157,6 +177,7 @@ int create_tables(char *filename, data_trigger *triggers, skippable_region *bloc
             function_name_end = strchr(pragma_line,'(');
             *function_name_end = 0;
             strcpy(triggers[number_of_triggers].support_thread, function_name_start);
+            
             if((variable_end = strchr(input_line,'='))==NULL)
               variable_end = strchr(input_line,';');
             *variable_end = 0;
@@ -166,8 +187,10 @@ int create_tables(char *filename, data_trigger *triggers, skippable_region *bloc
             variable_start = strrchr(input_line,' ');
             strcpy(triggers[number_of_triggers].name, variable_start+1);
             *variable_start = 0;
-            strcpy(triggers[number_of_triggers].type, input_line);
-//            fprintf(stderr,"trigger: type: %s name: %s function: %s\n",triggers[number_of_triggers].type,triggers[number_of_triggers].name,triggers[number_of_triggers].support_thread);
+            variable_start = eliminate_redundant_characters(input_line);
+            strcpy(triggers[number_of_triggers].type, variable_start);
+            strcpy(triggers[number_of_triggers].filename, filename);
+            fprintf(stderr,"<trigger[%d]> (%s, %s, %s, %s)\n",number_of_triggers, triggers[number_of_triggers].type,triggers[number_of_triggers].name,triggers[number_of_triggers].support_thread,triggers[number_of_triggers].filename);
             number_of_triggers++;
           break;
           case SKIPPABLE_REGION_BEGIN_PRAGMA:
@@ -206,22 +229,11 @@ int create_tables(char *filename, data_trigger *triggers, skippable_region *bloc
             parse_next_line=0;
       }
       else ;
-      memset(input_line, 0, MAX_LINE_LENGTH);
+      memset(input_buffer, 0, MAX_LINE_LENGTH);
       memset(temp_input_line, 0, MAX_LINE_LENGTH);
     }
     fclose(input_file);
-    for(i=0;i<number_of_triggers;i++)
-    {
-      for(j=0;j<number_of_threads;j++)
-      {
-        if(strcmp(triggers[i].support_thread,threads[j].name)==0)
-        {
-          triggers[i].state_variable = &threads[j];
-//          fprintf(stderr,"%s -> %s\n",triggers[i].name, triggers[i].state_variable->name);
-          break;
-        }
-      }
-    }
+
   return 0;
 }
 
